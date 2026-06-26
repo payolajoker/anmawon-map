@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>우리동네 안마원 찾기</title>
-  <meta name="description" content="공개 수집된 안마원 목록을 상호명, 전화번호, 주소, 요금, 영업시간, 예약과 주차 여부로 검색합니다.">
+  <title>우리동네 안마원 지도</title>
+  <meta name="description" content="공개 수집된 안마원 목록을 지도와 검색 필터로 확인합니다.">
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="./styles.css">
 </head>
@@ -14,9 +14,9 @@
   <header class="site-header">
     <div class="header-inner">
       <div class="brand-block">
-        <p class="source-label">공개 목록 기반</p>
-        <h1>우리동네 안마원 찾기</h1>
-        <p class="lead">상호명, 전화번호, 홈페이지, 주소, 요금, 영업시간, 예약과 주차 정보를 한 화면에서 확인합니다.</p>
+        <p class="source-label">공개 목록 기반 지도</p>
+        <h1>우리동네 안마원 지도</h1>
+        <p class="lead">검색 결과를 지도에서 먼저 보고, 필요한 정보는 상세 패널에서 바로 확인합니다.</p>
       </div>
       <div class="header-actions" aria-label="페이지 설정">
         <button class="theme-toggle" id="themeToggle" type="button" aria-pressed="false">어둡게</button>
@@ -85,12 +85,33 @@
           <strong id="resultCount">0</strong>
         </div>
         <div class="metric-card">
-          <span>좌표 보유</span>
+          <span>지도 표시</span>
           <strong id="coordCount">0</strong>
         </div>
         <div class="metric-card">
           <span>홈페이지</span>
           <strong id="homeCount">0</strong>
+        </div>
+      </div>
+    </section>
+
+    <section class="map-section" aria-labelledby="map-title">
+      <div class="map-toolbar">
+        <div>
+          <h2 id="map-title">지도에서 보기</h2>
+          <p id="mapSummary">카카오맵을 불러오는 중입니다.</p>
+        </div>
+        <div class="map-toolbar-actions">
+          <button id="fitMapButton" class="text-button" type="button">현재 결과 맞춤</button>
+          <button id="selectedMapButton" class="text-button" type="button">선택 위치</button>
+        </div>
+      </div>
+      <div class="map-canvas-wrap">
+        <div id="kakaoMap" class="kakao-map" aria-label="안마원 위치 지도"></div>
+        <div id="mapLoading" class="map-state">카카오맵을 불러오는 중입니다.</div>
+        <div id="mapError" class="map-state map-error" hidden>
+          <strong>지도를 불러오지 못했습니다.</strong>
+          <p>카카오 개발자 콘솔에서 Web 플랫폼 도메인 등록을 확인하세요.</p>
         </div>
       </div>
     </section>
@@ -113,8 +134,8 @@
 
       <aside class="detail-panel" aria-labelledby="detail-title">
         <div id="detailEmpty" class="detail-empty">
-          <strong>목록에서 안마원을 선택하세요.</strong>
-          <p>전화번호, 홈페이지, 주소, 요금, 영업시간과 지도 링크를 확인할 수 있습니다.</p>
+          <strong>목록 또는 지도 마커를 선택하세요.</strong>
+          <p>전화번호, 홈페이지, 주소, 요금, 영업시간과 길찾기 링크를 확인할 수 있습니다.</p>
         </div>
         <article id="detailCard" class="detail-card" hidden>
           <div class="detail-head">
@@ -142,16 +163,11 @@
             <p id="detailIntro"></p>
           </section>
 
-          <section class="map-box" aria-labelledby="map-title">
-            <div class="map-heading">
-              <div>
-                <h3 id="map-title">지도</h3>
-                <p id="mapHelp">API 키 없이 좌표 기반 지도 링크를 엽니다.</p>
-              </div>
-            </div>
-            <div id="mapPreview" class="map-preview"></div>
+          <section class="route-box" aria-labelledby="route-title">
+            <h3 id="route-title">지도와 길찾기</h3>
+            <p id="routeHelp">위 지도에서 선택한 위치를 확인하고, 외부 지도에서 길찾기를 열 수 있습니다.</p>
             <div class="map-actions">
-              <a id="kakaoMapLink" class="map-link" href="#" target="_blank" rel="noreferrer">카카오맵</a>
+              <a id="kakaoMapLink" class="map-link" href="#" target="_blank" rel="noreferrer">카카오맵 열기</a>
               <a id="kakaoRouteLink" class="map-link" href="#" target="_blank" rel="noreferrer">카카오 길찾기</a>
               <a id="googleMapLink" class="map-link" href="#" target="_blank" rel="noreferrer">구글지도</a>
             </div>
@@ -163,6 +179,7 @@
     </section>
   </main>
 
+  <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=c2db0ea3cf94c9b50e56b5883f54537a&libraries=clusterer&autoload=false"></script>
   <script src="./data/shops.slim.js"></script>
   <script src="./app.js" defer></script>
 </body>

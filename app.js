@@ -15,6 +15,17 @@
     selectedId: shops[0]?.id || null,
   };
 
+  const mapState = {
+    ready: false,
+    failed: false,
+    map: null,
+    clusterer: null,
+    markers: new Map(),
+    infoWindow: null,
+    signature: "",
+    lastFiltered: [],
+  };
+
   const els = {
     themeToggle: document.getElementById("themeToggle"),
     dataSummary: document.getElementById("dataSummary"),
@@ -47,17 +58,22 @@
     detailParking: document.getElementById("detailParking"),
     detailCoords: document.getElementById("detailCoords"),
     detailIntro: document.getElementById("detailIntro"),
-    mapHelp: document.getElementById("mapHelp"),
-    mapPreview: document.getElementById("mapPreview"),
+    routeHelp: document.getElementById("routeHelp"),
     kakaoMapLink: document.getElementById("kakaoMapLink"),
     kakaoRouteLink: document.getElementById("kakaoRouteLink"),
     googleMapLink: document.getElementById("googleMapLink"),
     sourceDetailLink: document.getElementById("sourceDetailLink"),
+    mapSummary: document.getElementById("mapSummary"),
+    kakaoMap: document.getElementById("kakaoMap"),
+    mapLoading: document.getElementById("mapLoading"),
+    mapError: document.getElementById("mapError"),
+    fitMapButton: document.getElementById("fitMapButton"),
+    selectedMapButton: document.getElementById("selectedMapButton"),
   };
 
   const normalise = (value) => String(value || "").toLowerCase().replace(/\s+/g, " ").trim();
   const present = (value) => Boolean(String(value || "").trim());
-  const hasCoords = (shop) => present(shop.lat) && present(shop.lng);
+  const hasCoords = (shop) => present(shop.lat) && present(shop.lng) && !Number.isNaN(Number(shop.lat)) && !Number.isNaN(Number(shop.lng));
   const emptyText = "확인 필요";
 
   function classifyAvailability(value) {
@@ -124,14 +140,12 @@
         kakao: `https://map.kakao.com/link/map/${name},${lat},${lng}`,
         kakaoRoute: `https://map.kakao.com/link/to/${name},${lat},${lng}`,
         google: `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`,
-        googleEmbed: `https://maps.google.com/maps?q=${lat},${lng}&z=16&hl=ko&output=embed`,
       };
     }
     return {
       kakao: `https://map.kakao.com/?q=${address}`,
       kakaoRoute: `https://map.kakao.com/?q=${address}`,
       google: `https://www.google.com/maps/search/?api=1&query=${address}`,
-      googleEmbed: "",
     };
   }
 
@@ -187,6 +201,9 @@
     els.homeCount.textContent = formatCount(homeCount);
     const visible = Math.min(state.visible, filtered.length);
     els.visibleSummary.textContent = `${formatCount(filtered.length)}곳 중 ${formatCount(visible)}곳을 표시 중입니다.`;
+    els.mapSummary.textContent = mapState.failed
+      ? "지도 로딩 실패. 카카오 도메인 등록을 확인하세요."
+      : `${formatCount(filtered.length)}곳 중 좌표가 있는 ${formatCount(coordCount)}곳을 지도에 표시합니다.`;
   }
 
   function renderResults(filtered) {
@@ -209,7 +226,7 @@
           <div class="shop-meta">
             <span class="status-pill ${reservation.cls}">${escapeHtml(reservation.text)}</span>
             <span class="status-pill ${parking.cls}">${escapeHtml(parking.text)}</span>
-            ${hasCoords(shop) ? `<span class="status-pill yes">좌표 있음</span>` : `<span class="status-pill">좌표 없음</span>`}
+            ${hasCoords(shop) ? `<span class="status-pill yes">지도 표시</span>` : `<span class="status-pill">좌표 없음</span>`}
           </div>
         </button>
       `;
@@ -223,28 +240,6 @@
     el.setAttribute("aria-disabled", disabled ? "true" : "false");
   }
 
-  function renderMap(shop) {
-    const urls = mapUrls(shop);
-    setLink(els.kakaoMapLink, urls.kakao, false);
-    setLink(els.kakaoRouteLink, urls.kakaoRoute, !hasCoords(shop));
-    setLink(els.googleMapLink, urls.google, false);
-
-    if (urls.googleEmbed) {
-      els.mapHelp.textContent = "API 키 없이 좌표와 외부 지도 링크를 사용합니다. 카카오 JS API 키는 필요 없습니다.";
-      els.mapPreview.innerHTML = `
-        <div class="map-coordinate-card">
-          <strong>${escapeHtml(shop.name)} 위치 좌표</strong>
-          <p>내장 지도 API 대신 검증 가능한 좌표와 외부 지도 링크를 제공합니다.</p>
-          <code>${escapeHtml(shop.lat)}, ${escapeHtml(shop.lng)}</code>
-        </div>
-      `;
-      return;
-    }
-
-    els.mapHelp.textContent = "좌표가 없어 주소 검색 링크로 연결합니다.";
-    els.mapPreview.innerHTML = `<div class="map-fallback"><p>이 항목은 위도와 경도가 없습니다.<br>카카오맵이나 구글지도에서 주소로 검색하세요.</p></div>`;
-  }
-
   function renderDetail(filtered) {
     let shop = shops.find((item) => item.id === state.selectedId);
     if (!shop || !filtered.some((item) => item.id === shop.id)) {
@@ -254,6 +249,7 @@
 
     els.detailEmpty.hidden = Boolean(shop);
     els.detailCard.hidden = !shop;
+    els.selectedMapButton.disabled = !shop || !hasCoords(shop) || !mapState.ready;
     if (!shop) return;
 
     const homepageUrl = cleanUrl(shop.homepageUrl);
@@ -267,20 +263,202 @@
     els.detailParking.textContent = safeText(shop.parking);
     els.detailCoords.textContent = hasCoords(shop) ? `${shop.lat}, ${shop.lng}` : emptyText;
     els.detailIntro.textContent = safeText(shop.intro);
+    els.routeHelp.textContent = hasCoords(shop)
+      ? "선택한 위치가 위 지도에 표시됩니다. 외부 지도에서 길찾기도 열 수 있습니다."
+      : "좌표가 없어 외부 지도에서는 주소 검색으로 연결합니다.";
 
+    const urls = mapUrls(shop);
     setLink(els.phoneLink, telHref(shop.phone), !present(shop.phone));
     setLink(els.homeLink, homepageUrl, !homepageUrl);
-    els.sourceDetailLink.href = shop.sourceUrl || "#";
-    els.sourceDetailLink.classList.toggle("is-disabled", !shop.sourceUrl);
-
-    renderMap(shop);
+    setLink(els.kakaoMapLink, urls.kakao, false);
+    setLink(els.kakaoRouteLink, urls.kakaoRoute, !hasCoords(shop));
+    setLink(els.googleMapLink, urls.google, false);
+    setLink(els.sourceDetailLink, shop.sourceUrl || "#", !shop.sourceUrl);
   }
 
-  function render() {
+  function failMap() {
+    if (mapState.ready) return;
+    mapState.failed = true;
+    els.mapLoading.hidden = true;
+    els.mapError.hidden = false;
+    els.selectedMapButton.disabled = true;
+    renderSummary(getFilteredShops());
+  }
+
+  function initKakaoMap() {
+    if (!window.kakao || !window.kakao.maps || typeof window.kakao.maps.load !== "function") {
+      failMap();
+      return;
+    }
+
+    const failTimer = window.setTimeout(failMap, 9000);
+    window.kakao.maps.load(() => {
+      window.clearTimeout(failTimer);
+      const center = new window.kakao.maps.LatLng(36.35, 127.8);
+      mapState.map = new window.kakao.maps.Map(els.kakaoMap, {
+        center,
+        level: 13,
+      });
+      mapState.infoWindow = new window.kakao.maps.InfoWindow({ zIndex: 10 });
+      const zoomControl = new window.kakao.maps.ZoomControl();
+      mapState.map.addControl(zoomControl, window.kakao.maps.ControlPosition.RIGHT);
+      const mapTypeControl = new window.kakao.maps.MapTypeControl();
+      mapState.map.addControl(mapTypeControl, window.kakao.maps.ControlPosition.TOPRIGHT);
+
+      if (window.kakao.maps.MarkerClusterer) {
+        mapState.clusterer = new window.kakao.maps.MarkerClusterer({
+          map: mapState.map,
+          averageCenter: true,
+          minLevel: 7,
+          gridSize: 70,
+          calculator: [10, 50, 100, 300],
+          styles: [
+            {
+              width: "42px",
+              height: "42px",
+              background: "rgba(20, 85, 51, 0.92)",
+              color: "#fff",
+              borderRadius: "21px",
+              textAlign: "center",
+              fontWeight: "800",
+              lineHeight: "42px",
+              border: "2px solid rgba(255, 255, 255, 0.9)",
+            },
+            {
+              width: "52px",
+              height: "52px",
+              background: "rgba(20, 85, 51, 0.92)",
+              color: "#fff",
+              borderRadius: "26px",
+              textAlign: "center",
+              fontWeight: "800",
+              lineHeight: "52px",
+              border: "2px solid rgba(255, 255, 255, 0.9)",
+            },
+            {
+              width: "62px",
+              height: "62px",
+              background: "rgba(20, 85, 51, 0.94)",
+              color: "#fff",
+              borderRadius: "31px",
+              textAlign: "center",
+              fontWeight: "900",
+              lineHeight: "62px",
+              border: "2px solid rgba(255, 255, 255, 0.9)",
+            },
+            {
+              width: "72px",
+              height: "72px",
+              background: "rgba(20, 85, 51, 0.96)",
+              color: "#fff",
+              borderRadius: "36px",
+              textAlign: "center",
+              fontWeight: "900",
+              lineHeight: "72px",
+              border: "2px solid rgba(255, 255, 255, 0.9)",
+            },
+          ],
+        });
+      }
+
+      mapState.ready = true;
+      mapState.failed = false;
+      els.mapLoading.hidden = true;
+      els.mapError.hidden = true;
+      render({ fitMap: true, panToSelected: false });
+    });
+  }
+
+  function clearMarkers() {
+    if (mapState.clusterer) mapState.clusterer.clear();
+    mapState.markers.forEach((marker) => marker.setMap(null));
+    mapState.markers.clear();
+    if (mapState.infoWindow) mapState.infoWindow.close();
+  }
+
+  function makeMarker(shop) {
+    const position = new window.kakao.maps.LatLng(Number(shop.lat), Number(shop.lng));
+    const marker = new window.kakao.maps.Marker({ position, title: shop.name });
+    window.kakao.maps.event.addListener(marker, "click", () => {
+      state.selectedId = shop.id;
+      render({ fitMap: false, panToSelected: true });
+      if (window.matchMedia("(max-width: 980px)").matches) {
+        els.detailCard.scrollIntoView({ block: "start", behavior: "smooth" });
+      }
+    });
+    return marker;
+  }
+
+  function markerInfoContent(shop) {
+    return `
+      <div style="min-width:190px;padding:12px 14px;color:#17211b;font-family:system-ui,sans-serif;line-height:1.45">
+        <strong style="display:block;margin-bottom:4px;font-size:14px">${escapeHtml(shop.name)}</strong>
+        <span style="display:block;color:#5f6f65;font-size:12px">${escapeHtml(shop.phone || "전화번호 확인 필요")}</span>
+        <span style="display:block;margin-top:4px;color:#5f6f65;font-size:12px">${escapeHtml(shop.address || "주소 확인 필요")}</span>
+      </div>
+    `;
+  }
+
+  function updateMapMarkers(filtered, shouldFit) {
+    mapState.lastFiltered = filtered;
+    if (!mapState.ready || !window.kakao?.maps) return;
+    const coordItems = filtered.filter(hasCoords);
+    const signature = coordItems.map((shop) => shop.id).join("|");
+    if (signature !== mapState.signature) {
+      clearMarkers();
+      const markers = coordItems.map((shop) => {
+        const marker = makeMarker(shop);
+        mapState.markers.set(shop.id, marker);
+        return marker;
+      });
+      if (mapState.clusterer) {
+        mapState.clusterer.addMarkers(markers);
+      } else {
+        markers.forEach((marker) => marker.setMap(mapState.map));
+      }
+      mapState.signature = signature;
+    }
+    if (shouldFit) fitMapTo(coordItems);
+    focusSelectedOnMap(false);
+  }
+
+  function fitMapTo(items) {
+    if (!mapState.ready || !items.length) return;
+    if (items.length === 1) {
+      const only = items[0];
+      mapState.map.setLevel(4);
+      mapState.map.panTo(new window.kakao.maps.LatLng(Number(only.lat), Number(only.lng)));
+      return;
+    }
+    const bounds = new window.kakao.maps.LatLngBounds();
+    items.forEach((shop) => bounds.extend(new window.kakao.maps.LatLng(Number(shop.lat), Number(shop.lng))));
+    mapState.map.setBounds(bounds);
+  }
+
+  function focusSelectedOnMap(pan) {
+    if (!mapState.ready || !state.selectedId) return;
+    const shop = shops.find((item) => item.id === state.selectedId);
+    if (!shop || !hasCoords(shop)) return;
+    const marker = mapState.markers.get(shop.id);
+    const position = new window.kakao.maps.LatLng(Number(shop.lat), Number(shop.lng));
+    if (pan) {
+      mapState.map.setLevel(Math.min(mapState.map.getLevel(), 5));
+      mapState.map.panTo(position);
+    }
+    if (marker && mapState.infoWindow) {
+      mapState.infoWindow.setContent(markerInfoContent(shop));
+      mapState.infoWindow.open(mapState.map, marker);
+    }
+  }
+
+  function render(options = {}) {
+    const { fitMap = false, panToSelected = false } = options;
     const filtered = getFilteredShops();
     renderSummary(filtered);
     renderDetail(filtered);
     renderResults(filtered);
+    updateMapMarkers(filtered, fitMap);
+    if (panToSelected) focusSelectedOnMap(true);
   }
 
   function resetFilters() {
@@ -299,71 +477,78 @@
     els.homepageOnly.checked = false;
     els.coordOnly.checked = false;
     els.sortSelect.value = "default";
-    render();
+    render({ fitMap: true });
   }
 
   function bindEvents() {
     els.searchInput.addEventListener("input", (event) => {
       state.query = event.target.value;
       state.visible = pageSize;
-      render();
+      render({ fitMap: true });
     });
     els.areaSelect.addEventListener("change", (event) => {
       state.area = event.target.value;
       state.visible = pageSize;
-      render();
+      render({ fitMap: true });
     });
     els.reservationSelect.addEventListener("change", (event) => {
       state.reservation = event.target.value;
       state.visible = pageSize;
-      render();
+      render({ fitMap: true });
     });
     els.parkingSelect.addEventListener("change", (event) => {
       state.parking = event.target.value;
       state.visible = pageSize;
-      render();
+      render({ fitMap: true });
     });
     els.sortSelect.addEventListener("change", (event) => {
       state.sort = event.target.value;
-      render();
+      render({ fitMap: false });
     });
     els.homepageOnly.addEventListener("change", (event) => {
       state.homepageOnly = event.target.checked;
       state.visible = pageSize;
-      render();
+      render({ fitMap: true });
     });
     els.coordOnly.addEventListener("change", (event) => {
       state.coordOnly = event.target.checked;
       state.visible = pageSize;
-      render();
+      render({ fitMap: true });
     });
     els.resetButton.addEventListener("click", resetFilters);
     els.loadMoreButton.addEventListener("click", () => {
       state.visible += pageSize;
-      render();
+      render({ fitMap: false });
     });
     els.results.addEventListener("click", (event) => {
       const card = event.target.closest(".shop-card");
       if (!card) return;
       state.selectedId = card.dataset.id;
-      render();
+      render({ fitMap: false, panToSelected: true });
       if (window.matchMedia("(max-width: 980px)").matches) {
         els.detailCard.scrollIntoView({ block: "start", behavior: "smooth" });
       }
+    });
+    els.fitMapButton.addEventListener("click", () => {
+      fitMapTo(getFilteredShops().filter(hasCoords));
+    });
+    els.selectedMapButton.addEventListener("click", () => {
+      focusSelectedOnMap(true);
     });
     els.themeToggle.addEventListener("click", () => {
       const root = document.documentElement;
       const current = root.getAttribute("data-theme");
       const next = current === "dark" ? "light" : "dark";
       root.setAttribute("data-theme", next);
-      localStorage.setItem("anmawon-theme", next);
+      try { localStorage.setItem("anmawon-theme", next); } catch (_) {}
       els.themeToggle.textContent = next === "dark" ? "밝게" : "어둡게";
       els.themeToggle.setAttribute("aria-pressed", next === "dark" ? "true" : "false");
     });
   }
 
   function initTheme() {
-    const saved = localStorage.getItem("anmawon-theme");
+    let saved = "";
+    try { saved = localStorage.getItem("anmawon-theme") || ""; } catch (_) {}
     if (saved === "dark" || saved === "light") {
       document.documentElement.setAttribute("data-theme", saved);
       els.themeToggle.textContent = saved === "dark" ? "밝게" : "어둡게";
@@ -375,7 +560,8 @@
     initTheme();
     renderAreaOptions();
     bindEvents();
-    render();
+    render({ fitMap: false });
+    initKakaoMap();
   }
 
   init();
