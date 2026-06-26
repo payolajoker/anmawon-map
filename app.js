@@ -305,8 +305,11 @@
       else markers.forEach((marker) => marker.setMap(mapState.map));
       mapState.signature = signature;
     }
-    if (shouldFit) fitMapTo(filtered);
-    focusSelectedOnMap(false);
+    if (shouldFit) {
+      fitMapTo(filtered);
+      if (filtered.length === 1) focusSelectedOnMap(false);
+      else closeSelectedOverlay();
+    }
   }
 
   function fitMapTo(items) {
