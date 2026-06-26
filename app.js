@@ -201,9 +201,12 @@
     els.homeCount.textContent = formatCount(homeCount);
     const visible = Math.min(state.visible, filtered.length);
     els.visibleSummary.textContent = `${formatCount(filtered.length)}곳 중 ${formatCount(visible)}곳을 표시 중입니다.`;
+    const missingCoordCount = filtered.length - coordCount;
     els.mapSummary.textContent = mapState.failed
       ? "지도 로딩 실패. 카카오 도메인 등록을 확인하세요."
-      : `${formatCount(filtered.length)}곳 중 좌표가 있는 ${formatCount(coordCount)}곳을 지도에 표시합니다.`;
+      : missingCoordCount > 0
+        ? `검색 결과 ${formatCount(filtered.length)}곳 중 ${formatCount(coordCount)}곳은 지도에 표시됩니다. 좌표 없는 ${formatCount(missingCoordCount)}곳은 목록에만 표시됩니다.`
+        : `검색 결과 ${formatCount(filtered.length)}곳 전부 지도에 표시됩니다.`;
   }
 
   function renderResults(filtered) {
@@ -226,7 +229,7 @@
           <div class="shop-meta">
             <span class="status-pill ${reservation.cls}">${escapeHtml(reservation.text)}</span>
             <span class="status-pill ${parking.cls}">${escapeHtml(parking.text)}</span>
-            ${hasCoords(shop) ? `<span class="status-pill yes">지도 표시</span>` : `<span class="status-pill">좌표 없음</span>`}
+            ${hasCoords(shop) ? `<span class="status-pill yes">지도 표시 가능</span>` : `<span class="status-pill">좌표 없음</span>`}
           </div>
         </button>
       `;
