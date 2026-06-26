@@ -140,6 +140,11 @@
     return Math.min(5, items.length);
   }
 
+  function getDisplayShops(filtered) {
+    if (!mapState.userLocation) return filtered;
+    return shopsByDistance(filtered).slice(0, targetNearbyCount(filtered));
+  }
+
   function mapUrls(shop) {
     const name = encodeURIComponent(shop.name || "안마원");
     const lat = encodeURIComponent(shop.lat);
@@ -180,11 +185,11 @@
     return items;
   }
 
-  function renderSummary(filtered) {
+  function renderSummary(filtered, displayed = filtered) {
     const total = shops.length;
-    const homeCount = filtered.filter((shop) => present(shop.homepageUrl)).length;
+    const homeCount = displayed.filter((shop) => present(shop.homepageUrl)).length;
     els.dataSummary.textContent = `수집일 ${payload.metadata?.collectedDate || "2026-06-26"}, 좌표 확인 ${formatCount(total)}곳`;
-    els.resultCount.textContent = formatCount(filtered.length);
+    els.resultCount.textContent = formatCount(displayed.length);
     els.homeCount.textContent = formatCount(homeCount);
 
     if (mapState.failed) {
@@ -192,11 +197,8 @@
     } else if (mapState.locationStatus === "locating") {
       els.mapSummary.textContent = "현재 위치를 확인하는 중입니다.";
     } else if (mapState.userLocation && filtered.length) {
-      const target = targetNearbyCount(filtered);
-      const visible = mapState.nearbyVisibleCount;
-      els.mapSummary.textContent = visible
-        ? `현재 위치 기준 가까운 ${formatCount(visible)}곳이 보이도록 맞췄습니다.`
-        : `현재 위치 기준 가까운 ${formatCount(target)}곳이 보이도록 맞춥니다.`;
+      const visible = mapState.nearbyVisibleCount || displayed.length;
+      els.mapSummary.textContent = `현재 위치 기준 가까운 ${formatCount(visible)}곳을 지도에 표시합니다.`;
     } else {
       els.mapSummary.textContent = `${formatCount(filtered.length)}곳을 지도에 표시합니다.`;
     }
@@ -446,15 +448,17 @@
         mapState.map.setLevel(nextBest.level);
         mapState.map.setCenter(new window.kakao.maps.LatLng(mapState.userLocation.lat, mapState.userLocation.lng));
       }
-      mapState.nearbyVisibleCount = nextBest.count;
-      renderSummary(getFilteredShops());
+      mapState.nearbyVisibleCount = Math.min(nextBest.count, items.length);
+      const filtered = getFilteredShops();
+      renderSummary(filtered, getDisplayShops(filtered));
       return;
     }
 
     const nextLevel = currentCount > maxVisible ? currentLevel - 1 : currentLevel + 1;
     if (nextLevel < 1 || nextLevel > 14 || visited.has(nextLevel)) {
-      mapState.nearbyVisibleCount = nextBest.count;
-      renderSummary(getFilteredShops());
+      mapState.nearbyVisibleCount = Math.min(nextBest.count, items.length);
+      const filtered = getFilteredShops();
+      renderSummary(filtered, getDisplayShops(filtered));
       return;
     }
 
@@ -477,7 +481,7 @@
     if (!items.length) {
       mapState.map.setLevel(5);
       mapState.map.panTo(userPosition);
-      renderSummary(items);
+      renderSummary(items, items);
       return;
     }
 
@@ -516,12 +520,13 @@
   function render(options = {}) {
     const { fitMap = false, panToSelected = false, useUserLocation = true } = options;
     const filtered = getFilteredShops();
-    if (fitMap && useUserLocation && mapState.userLocation && filtered.length && !panToSelected) {
-      selectNearestShop(filtered);
+    const displayed = useUserLocation ? getDisplayShops(filtered) : filtered;
+    if (fitMap && useUserLocation && mapState.userLocation && displayed.length && !panToSelected) {
+      selectNearestShop(displayed);
     }
-    renderSummary(filtered);
-    renderDetail(filtered);
-    updateMapMarkers(filtered, fitMap, { useUserLocation });
+    renderSummary(filtered, displayed);
+    renderDetail(displayed);
+    updateMapMarkers(displayed, fitMap, { useUserLocation });
     if (panToSelected) focusSelectedOnMap(true);
   }
 
@@ -540,7 +545,7 @@
           lng: Number(position.coords.longitude),
         };
         const filtered = getFilteredShops();
-        selectNearestShop(filtered);
+        selectNearestShop(getDisplayShops(filtered));
         render({ fitMap: true, panToSelected: false, useUserLocation: true });
       },
       () => {
@@ -584,7 +589,11 @@
       render({ fitMap: true });
     });
     els.resetButton.addEventListener("click", resetFilters);
-    els.fitMapButton.addEventListener("click", () => fitMapTo(getFilteredShops()));
+    els.fitMapButton.addEventListener("click", () => {
+      const filtered = getFilteredShops();
+      if (mapState.userLocation) fitMapToUserLocation(getDisplayShops(filtered));
+      else fitMapTo(filtered);
+    });
     els.selectedMapButton.addEventListener("click", () => focusSelectedOnMap(true));
   }
 
