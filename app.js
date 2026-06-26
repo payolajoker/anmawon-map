@@ -14,7 +14,6 @@
     ready: false,
     failed: false,
     map: null,
-    clusterer: null,
     markers: new Map(),
     selectedOverlay: null,
     userLocation: null,
@@ -62,6 +61,8 @@
   const normalise = (value) => String(value || "").toLowerCase().replace(/\s+/g, " ").trim();
   const present = (value) => Boolean(String(value || "").trim());
   const emptyText = "확인 필요";
+  const minItemsForPinThinning = 80;
+  const maxMapPins = 220;
 
   function hasCoords(shop) {
     return present(shop.lat) && present(shop.lng) && !Number.isNaN(Number(shop.lat)) && !Number.isNaN(Number(shop.lng));
@@ -140,9 +141,33 @@
     return Math.min(5, items.length);
   }
 
+  function thinOverlappingShops(items) {
+    if (items.length <= minItemsForPinThinning) return items;
+
+    let cellSize = 0.002;
+    let kept = items;
+    while (cellSize <= 0.35) {
+      const occupied = new Set();
+      kept = [];
+      items.forEach((shop) => {
+        const latKey = Math.round(Number(shop.lat) / cellSize);
+        const lngKey = Math.round(Number(shop.lng) / cellSize);
+        const key = `${latKey}:${lngKey}`;
+        if (occupied.has(key)) return;
+        occupied.add(key);
+        kept.push(shop);
+      });
+      if (kept.length <= maxMapPins) return kept;
+      cellSize *= 1.5;
+    }
+
+    const step = kept.length / maxMapPins;
+    return Array.from({ length: maxMapPins }, (_, index) => kept[Math.floor(index * step)]);
+  }
+
   function getDisplayShops(filtered) {
-    if (!mapState.userLocation) return filtered;
-    return shopsByDistance(filtered).slice(0, targetNearbyCount(filtered));
+    if (mapState.userLocation) return shopsByDistance(filtered).slice(0, targetNearbyCount(filtered));
+    return thinOverlappingShops(filtered);
   }
 
   function mapUrls(shop) {
@@ -199,8 +224,10 @@
     } else if (mapState.userLocation && filtered.length) {
       const visible = mapState.nearbyVisibleCount || displayed.length;
       els.mapSummary.textContent = `현재 위치 기준 가까운 ${formatCount(visible)}곳을 지도에 표시합니다.`;
+    } else if (displayed.length !== filtered.length) {
+      els.mapSummary.textContent = `겹치는 핀을 줄여 ${formatCount(displayed.length)}곳을 지도에 표시합니다.`;
     } else {
-      els.mapSummary.textContent = `${formatCount(filtered.length)}곳을 지도에 표시합니다.`;
+      els.mapSummary.textContent = `${formatCount(displayed.length)}곳을 지도에 표시합니다.`;
     }
   }
 
@@ -270,21 +297,6 @@
       const mapTypeControl = new window.kakao.maps.MapTypeControl();
       mapState.map.addControl(mapTypeControl, window.kakao.maps.ControlPosition.TOPRIGHT);
 
-      if (window.kakao.maps.MarkerClusterer) {
-        mapState.clusterer = new window.kakao.maps.MarkerClusterer({
-          map: mapState.map,
-          averageCenter: true,
-          minLevel: 7,
-          gridSize: 70,
-          calculator: [10, 50, 100, 300],
-          styles: [
-            clusterStyle(42),
-            clusterStyle(52),
-            clusterStyle(62),
-            clusterStyle(72),
-          ],
-        });
-      }
 
       mapState.ready = true;
       mapState.failed = false;
@@ -295,23 +307,8 @@
     });
   }
 
-  function clusterStyle(size) {
-    return {
-      width: `${size}px`,
-      height: `${size}px`,
-      background: "rgba(20, 85, 51, 0.94)",
-      color: "#fff",
-      borderRadius: `${size / 2}px`,
-      textAlign: "center",
-      fontWeight: "900",
-      lineHeight: `${size}px`,
-      border: "2px solid rgba(255, 255, 255, 0.92)",
-      boxShadow: "0 8px 20px rgba(16, 32, 25, 0.2)",
-    };
-  }
 
   function clearMarkers() {
-    if (mapState.clusterer) mapState.clusterer.clear();
     mapState.markers.forEach((marker) => marker.setMap(null));
     mapState.markers.clear();
     closeSelectedOverlay();
@@ -373,9 +370,7 @@
         mapState.markers.set(shop.id, marker);
         return marker;
       });
-      const shouldCluster = mapState.clusterer && !(mapState.userLocation && markers.length <= 5);
-      if (shouldCluster) mapState.clusterer.addMarkers(markers);
-      else markers.forEach((marker) => marker.setMap(mapState.map));
+      markers.forEach((marker) => marker.setMap(mapState.map));
       mapState.signature = signature;
     }
     updateUserLocationMarker();
