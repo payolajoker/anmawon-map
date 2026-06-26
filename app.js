@@ -4,11 +4,9 @@
 
   const state = {
     query: "",
-    area: "all",
     reservation: "all",
     parking: "all",
     homepageOnly: false,
-    sort: "default",
     selectedId: shops[0]?.id || null,
   };
 
@@ -27,17 +25,14 @@
     themeToggle: document.getElementById("themeToggle"),
     dataSummary: document.getElementById("dataSummary"),
     searchInput: document.getElementById("searchInput"),
-    areaSelect: document.getElementById("areaSelect"),
     reservationSelect: document.getElementById("reservationSelect"),
     parkingSelect: document.getElementById("parkingSelect"),
-    sortSelect: document.getElementById("sortSelect"),
     homepageOnly: document.getElementById("homepageOnly"),
     resetButton: document.getElementById("resetButton"),
     resultCount: document.getElementById("resultCount"),
     homeCount: document.getElementById("homeCount"),
     detailEmpty: document.getElementById("detailEmpty"),
     detailCard: document.getElementById("detailCard"),
-    detailArea: document.getElementById("detailArea"),
     detailTitle: document.getElementById("detail-title"),
     detailAddress: document.getElementById("detailAddress"),
     phoneLink: document.getElementById("phoneLink"),
@@ -128,14 +123,12 @@
       shop.reservation,
       shop.parking,
       shop.intro,
-      shop.area,
     ].join(" "));
   }
 
   function getFilteredShops() {
     const query = normalise(state.query);
     let items = shops.filter((shop) => {
-      if (state.area !== "all" && shop.area !== state.area) return false;
       if (state.homepageOnly && !present(shop.homepageUrl)) return false;
       if (state.reservation !== "all" && classifyAvailability(shop.reservation) !== state.reservation) return false;
       if (state.parking !== "all" && classifyAvailability(shop.parking) !== state.parking) return false;
@@ -143,18 +136,9 @@
       return true;
     });
 
-    items = [...items].sort((a, b) => {
-      if (state.sort === "name") return a.name.localeCompare(b.name, "ko-KR");
-      if (state.sort === "area") return `${a.area}${a.name}`.localeCompare(`${b.area}${b.name}`, "ko-KR");
-      return Number(b.no) - Number(a.no);
-    });
+    items = [...items].sort((a, b) => a.name.localeCompare(b.name, "ko-KR"));
 
     return items;
-  }
-
-  function renderAreaOptions() {
-    const areas = [...new Set(shops.map((shop) => shop.area).filter(Boolean))].sort((a, b) => a.localeCompare(b, "ko-KR"));
-    els.areaSelect.innerHTML = `<option value="all">전체 지역</option>${areas.map((area) => `<option value="${escapeHtml(area)}">${escapeHtml(area)}</option>`).join("")}`;
   }
 
   function renderSummary(filtered) {
@@ -188,7 +172,6 @@
 
     const homepageUrl = cleanUrl(shop.homepageUrl);
     const urls = mapUrls(shop);
-    els.detailArea.textContent = shop.area || "지역 미상";
     els.detailTitle.textContent = shop.name || "상호명 없음";
     els.detailAddress.textContent = safeText(shop.address);
     els.detailPhone.textContent = safeText(shop.phone);
@@ -374,18 +357,14 @@
 
   function resetFilters() {
     state.query = "";
-    state.area = "all";
     state.reservation = "all";
     state.parking = "all";
     state.homepageOnly = false;
-    state.sort = "default";
     state.selectedId = shops[0]?.id || null;
     els.searchInput.value = "";
-    els.areaSelect.value = "all";
     els.reservationSelect.value = "all";
     els.parkingSelect.value = "all";
     els.homepageOnly.checked = false;
-    els.sortSelect.value = "default";
     render({ fitMap: true, panToSelected: false });
   }
 
@@ -394,20 +373,12 @@
       state.query = event.target.value;
       render({ fitMap: true });
     });
-    els.areaSelect.addEventListener("change", (event) => {
-      state.area = event.target.value;
-      render({ fitMap: true });
-    });
     els.reservationSelect.addEventListener("change", (event) => {
       state.reservation = event.target.value;
       render({ fitMap: true });
     });
     els.parkingSelect.addEventListener("change", (event) => {
       state.parking = event.target.value;
-      render({ fitMap: true });
-    });
-    els.sortSelect.addEventListener("change", (event) => {
-      state.sort = event.target.value;
       render({ fitMap: true });
     });
     els.homepageOnly.addEventListener("change", (event) => {
@@ -440,7 +411,6 @@
 
   function init() {
     initTheme();
-    renderAreaOptions();
     bindEvents();
     render({ fitMap: false });
     initKakaoMap();

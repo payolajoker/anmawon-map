@@ -231,7 +231,7 @@ h1 {
 .filter-grid {
   margin-top: 16px;
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
 }
 
@@ -366,7 +366,6 @@ h1 {
 
 .address-line { margin-bottom: 0; color: var(--muted); line-height: 1.55; }
 
-.area-badge,
 .status-pill {
   display: inline-flex;
   align-items: center;
@@ -377,7 +376,6 @@ h1 {
   font-weight: 800;
 }
 
-.area-badge { background: var(--accent-soft); color: var(--accent-strong); }
 .status-pill { border: 1px solid var(--line); background: var(--surface-muted); color: var(--muted); }
 .status-pill.yes { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); color: var(--accent-strong); }
 .status-pill.no { color: var(--danger); }
