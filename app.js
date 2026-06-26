@@ -17,6 +17,10 @@
     clusterer: null,
     markers: new Map(),
     selectedOverlay: null,
+    userLocation: null,
+    userOverlay: null,
+    locationStatus: "idle",
+    nearbyVisibleCount: null,
     signature: "",
     lastFiltered: [],
   };
@@ -100,6 +104,42 @@
     return `http://${text}`;
   }
 
+  function distanceMeters(lat1, lng1, lat2, lng2) {
+    const toRad = (degrees) => degrees * Math.PI / 180;
+    const earthRadius = 6371000;
+    const dLat = toRad(lat2 - lat1);
+    const dLng = toRad(lng2 - lng1);
+    const a = Math.sin(dLat / 2) ** 2
+      + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+    return 2 * earthRadius * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+
+  function shopsByDistance(items) {
+    if (!mapState.userLocation) return [...items];
+    return [...items]
+      .map((shop) => ({
+        ...shop,
+        distanceFromUser: distanceMeters(
+          mapState.userLocation.lat,
+          mapState.userLocation.lng,
+          Number(shop.lat),
+          Number(shop.lng),
+        ),
+      }))
+      .sort((a, b) => a.distanceFromUser - b.distanceFromUser);
+  }
+
+  function selectNearestShop(items) {
+    if (!mapState.userLocation || !items.length) return;
+    const nearest = shopsByDistance(items)[0];
+    if (nearest) state.selectedId = nearest.id;
+  }
+
+  function targetNearbyCount(items) {
+    if (items.length <= 2) return items.length;
+    return Math.min(5, items.length);
+  }
+
   function mapUrls(shop) {
     const name = encodeURIComponent(shop.name || "안마원");
     const lat = encodeURIComponent(shop.lat);
@@ -146,9 +186,20 @@
     els.dataSummary.textContent = `수집일 ${payload.metadata?.collectedDate || "2026-06-26"}, 좌표 확인 ${formatCount(total)}곳`;
     els.resultCount.textContent = formatCount(filtered.length);
     els.homeCount.textContent = formatCount(homeCount);
-    els.mapSummary.textContent = mapState.failed
-      ? "지도 로딩 실패. 카카오 도메인 등록을 확인하세요."
-      : `${formatCount(filtered.length)}곳을 지도에 표시합니다.`;
+
+    if (mapState.failed) {
+      els.mapSummary.textContent = "지도 로딩 실패. 카카오 도메인 등록을 확인하세요.";
+    } else if (mapState.locationStatus === "locating") {
+      els.mapSummary.textContent = "현재 위치를 확인하는 중입니다.";
+    } else if (mapState.userLocation && filtered.length) {
+      const target = targetNearbyCount(filtered);
+      const visible = mapState.nearbyVisibleCount;
+      els.mapSummary.textContent = visible
+        ? `현재 위치 기준 가까운 ${formatCount(visible)}곳이 보이도록 맞췄습니다.`
+        : `현재 위치 기준 가까운 ${formatCount(target)}곳이 보이도록 맞춥니다.`;
+    } else {
+      els.mapSummary.textContent = `${formatCount(filtered.length)}곳을 지도에 표시합니다.`;
+    }
   }
 
   function setLink(el, href, disabled = false) {
@@ -237,7 +288,8 @@
       mapState.failed = false;
       els.mapLoading.hidden = true;
       els.mapError.hidden = true;
-      render({ fitMap: true, panToSelected: false });
+      render({ fitMap: false, panToSelected: false });
+      requestUserLocation();
     });
   }
 
@@ -261,6 +313,24 @@
     mapState.markers.forEach((marker) => marker.setMap(null));
     mapState.markers.clear();
     closeSelectedOverlay();
+  }
+
+  function userLocationContent() {
+    return `<div class="user-location-marker" aria-label="현재 위치"></div>`;
+  }
+
+  function updateUserLocationMarker() {
+    if (!mapState.ready || !mapState.userLocation || !window.kakao?.maps) return;
+    if (mapState.userOverlay) mapState.userOverlay.setMap(null);
+    const position = new window.kakao.maps.LatLng(mapState.userLocation.lat, mapState.userLocation.lng);
+    mapState.userOverlay = new window.kakao.maps.CustomOverlay({
+      position,
+      content: userLocationContent(),
+      xAnchor: 0.5,
+      yAnchor: 0.5,
+      zIndex: 30,
+    });
+    mapState.userOverlay.setMap(mapState.map);
   }
 
   function closeSelectedOverlay() {
@@ -290,7 +360,7 @@
     `;
   }
 
-  function updateMapMarkers(filtered, shouldFit) {
+  function updateMapMarkers(filtered, shouldFit, options = {}) {
     mapState.lastFiltered = filtered;
     if (!mapState.ready || !window.kakao?.maps) return;
     const signature = filtered.map((shop) => shop.id).join("|");
@@ -305,14 +375,20 @@
       else markers.forEach((marker) => marker.setMap(mapState.map));
       mapState.signature = signature;
     }
+    updateUserLocationMarker();
     if (shouldFit) {
-      fitMapTo(filtered);
-      if (filtered.length === 1) focusSelectedOnMap(false);
-      else closeSelectedOverlay();
+      if (mapState.userLocation && options.useUserLocation !== false) {
+        fitMapToUserLocation(filtered);
+      } else {
+        fitMapTo(filtered);
+        if (filtered.length === 1) focusSelectedOnMap(false);
+        else closeSelectedOverlay();
+      }
     }
   }
 
   function fitMapTo(items) {
+    mapState.nearbyVisibleCount = null;
     if (!mapState.ready || !items.length) return;
     if (items.length === 1) {
       const only = items[0];
@@ -323,6 +399,95 @@
     const bounds = new window.kakao.maps.LatLngBounds();
     items.forEach((shop) => bounds.extend(new window.kakao.maps.LatLng(Number(shop.lat), Number(shop.lng))));
     mapState.map.setBounds(bounds);
+  }
+
+  function symmetricBoundsAroundUser(targets) {
+    const { lat, lng } = mapState.userLocation;
+    const minDelta = 0.003;
+    const padding = 1.28;
+    let latDelta = minDelta;
+    let lngDelta = minDelta;
+    targets.forEach((shop) => {
+      latDelta = Math.max(latDelta, Math.abs(Number(shop.lat) - lat));
+      lngDelta = Math.max(lngDelta, Math.abs(Number(shop.lng) - lng));
+    });
+    latDelta *= padding;
+    lngDelta *= padding;
+    const bounds = new window.kakao.maps.LatLngBounds();
+    bounds.extend(new window.kakao.maps.LatLng(lat - latDelta, lng - lngDelta));
+    bounds.extend(new window.kakao.maps.LatLng(lat + latDelta, lng + lngDelta));
+    return bounds;
+  }
+
+  function visibleShopCount(items) {
+    if (!mapState.ready || !items.length) return 0;
+    const bounds = mapState.map.getBounds();
+    return items.filter((shop) => bounds.contain(new window.kakao.maps.LatLng(Number(shop.lat), Number(shop.lng)))).length;
+  }
+
+  function rangeScore(count, minVisible, maxVisible) {
+    if (count >= minVisible && count <= maxVisible) return 0;
+    return count < minVisible ? minVisible - count : count - maxVisible;
+  }
+
+  function adjustZoomToVisibleRange(items, attempt = 0, visited = new Set(), best = null) {
+    if (!mapState.ready || !mapState.userLocation || !items.length) return;
+    const minVisible = Math.min(3, items.length);
+    const maxVisible = Math.min(5, items.length);
+    const currentLevel = mapState.map.getLevel();
+    const currentCount = visibleShopCount(items);
+    const currentScore = rangeScore(currentCount, minVisible, maxVisible);
+    const nextBest = !best || currentScore < best.score
+      ? { level: currentLevel, count: currentCount, score: currentScore }
+      : best;
+
+    if (currentScore === 0 || attempt >= 12) {
+      if (nextBest.level !== currentLevel) {
+        mapState.map.setLevel(nextBest.level);
+        mapState.map.setCenter(new window.kakao.maps.LatLng(mapState.userLocation.lat, mapState.userLocation.lng));
+      }
+      mapState.nearbyVisibleCount = nextBest.count;
+      renderSummary(getFilteredShops());
+      return;
+    }
+
+    const nextLevel = currentCount > maxVisible ? currentLevel - 1 : currentLevel + 1;
+    if (nextLevel < 1 || nextLevel > 14 || visited.has(nextLevel)) {
+      mapState.nearbyVisibleCount = nextBest.count;
+      renderSummary(getFilteredShops());
+      return;
+    }
+
+    visited.add(currentLevel);
+    mapState.map.setLevel(nextLevel);
+    mapState.map.setCenter(new window.kakao.maps.LatLng(mapState.userLocation.lat, mapState.userLocation.lng));
+    window.setTimeout(() => adjustZoomToVisibleRange(items, attempt + 1, visited, nextBest), 180);
+  }
+
+  function fitMapToUserLocation(items) {
+    if (!mapState.ready || !mapState.userLocation) {
+      fitMapTo(items);
+      return;
+    }
+    mapState.nearbyVisibleCount = null;
+    closeSelectedOverlay();
+    updateUserLocationMarker();
+    const userPosition = new window.kakao.maps.LatLng(mapState.userLocation.lat, mapState.userLocation.lng);
+
+    if (!items.length) {
+      mapState.map.setLevel(5);
+      mapState.map.panTo(userPosition);
+      renderSummary(items);
+      return;
+    }
+
+    const nearby = shopsByDistance(items).slice(0, targetNearbyCount(items));
+    mapState.map.setBounds(symmetricBoundsAroundUser(nearby));
+    window.setTimeout(() => {
+      mapState.map.setCenter(userPosition);
+      adjustZoomToVisibleRange(items);
+      if (items.length === 1) focusSelectedOnMap(false);
+    }, 220);
   }
 
   function focusSelectedOnMap(pan) {
@@ -349,12 +514,43 @@
   }
 
   function render(options = {}) {
-    const { fitMap = false, panToSelected = false } = options;
+    const { fitMap = false, panToSelected = false, useUserLocation = true } = options;
     const filtered = getFilteredShops();
+    if (fitMap && useUserLocation && mapState.userLocation && filtered.length && !panToSelected) {
+      selectNearestShop(filtered);
+    }
     renderSummary(filtered);
     renderDetail(filtered);
-    updateMapMarkers(filtered, fitMap);
+    updateMapMarkers(filtered, fitMap, { useUserLocation });
     if (panToSelected) focusSelectedOnMap(true);
+  }
+
+  function requestUserLocation() {
+    if (!navigator.geolocation || !mapState.ready) {
+      render({ fitMap: true, panToSelected: false, useUserLocation: false });
+      return;
+    }
+    mapState.locationStatus = "locating";
+    renderSummary(getFilteredShops());
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        mapState.locationStatus = "ready";
+        mapState.userLocation = {
+          lat: Number(position.coords.latitude),
+          lng: Number(position.coords.longitude),
+        };
+        const filtered = getFilteredShops();
+        selectNearestShop(filtered);
+        render({ fitMap: true, panToSelected: false, useUserLocation: true });
+      },
+      () => {
+        mapState.locationStatus = "failed";
+        mapState.userLocation = null;
+        mapState.nearbyVisibleCount = null;
+        render({ fitMap: true, panToSelected: false, useUserLocation: false });
+      },
+      { enableHighAccuracy: true, timeout: 9000, maximumAge: 300000 },
+    );
   }
 
   function resetFilters() {

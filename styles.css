@@ -283,6 +283,25 @@ h1 {
 .map-error strong { display: block; margin-bottom: 8px; color: var(--text); }
 .map-error p { margin: 0; }
 
+
+.user-location-marker {
+  position: relative;
+  width: 20px;
+  height: 20px;
+  border: 3px solid #ffffff;
+  border-radius: 999px;
+  background: #2563eb;
+  box-shadow: 0 8px 20px rgba(37, 99, 235, 0.36);
+}
+
+.user-location-marker::after {
+  content: "";
+  position: absolute;
+  inset: -9px;
+  border: 2px solid rgba(37, 99, 235, 0.22);
+  border-radius: inherit;
+}
+
 .marker-label {
   position: relative;
   width: 176px;
