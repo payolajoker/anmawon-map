@@ -404,7 +404,7 @@
   function symmetricBoundsAroundUser(targets) {
     const { lat, lng } = mapState.userLocation;
     const minDelta = 0.003;
-    const padding = 1.28;
+    const padding = 1.08;
     let latDelta = minDelta;
     let lngDelta = minDelta;
     targets.forEach((shop) => {
@@ -427,7 +427,7 @@
 
   function rangeScore(count, minVisible, maxVisible) {
     if (count >= minVisible && count <= maxVisible) return 0;
-    return count < minVisible ? minVisible - count : count - maxVisible;
+    return count < minVisible ? (minVisible - count) * 4 : count - maxVisible;
   }
 
   function adjustZoomToVisibleRange(items, attempt = 0, visited = new Set(), best = null) {
