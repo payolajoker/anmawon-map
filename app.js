@@ -373,7 +373,8 @@
         mapState.markers.set(shop.id, marker);
         return marker;
       });
-      if (mapState.clusterer) mapState.clusterer.addMarkers(markers);
+      const shouldCluster = mapState.clusterer && !(mapState.userLocation && markers.length <= 5);
+      if (shouldCluster) mapState.clusterer.addMarkers(markers);
       else markers.forEach((marker) => marker.setMap(mapState.map));
       mapState.signature = signature;
     }
