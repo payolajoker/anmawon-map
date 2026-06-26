@@ -276,7 +276,6 @@ h1 {
 
 .marker-label {
   width: 176px;
-  transform: translate(-88px, -70px);
   border: 1px solid rgba(20, 85, 51, 0.22);
   border-radius: 13px;
   background: rgba(255, 255, 255, 0.96);
