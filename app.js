@@ -22,7 +22,6 @@
   };
 
   const els = {
-    themeToggle: document.getElementById("themeToggle"),
     dataSummary: document.getElementById("dataSummary"),
     searchInput: document.getElementById("searchInput"),
     reservationSelect: document.getElementById("reservationSelect"),
@@ -388,29 +387,9 @@
     els.resetButton.addEventListener("click", resetFilters);
     els.fitMapButton.addEventListener("click", () => fitMapTo(getFilteredShops()));
     els.selectedMapButton.addEventListener("click", () => focusSelectedOnMap(true));
-    els.themeToggle.addEventListener("click", () => {
-      const root = document.documentElement;
-      const current = root.getAttribute("data-theme");
-      const next = current === "dark" ? "light" : "dark";
-      root.setAttribute("data-theme", next);
-      try { localStorage.setItem("anmawon-theme", next); } catch (_) {}
-      els.themeToggle.textContent = next === "dark" ? "밝게" : "어둡게";
-      els.themeToggle.setAttribute("aria-pressed", next === "dark" ? "true" : "false");
-    });
-  }
-
-  function initTheme() {
-    let saved = "";
-    try { saved = localStorage.getItem("anmawon-theme") || ""; } catch (_) {}
-    if (saved === "dark" || saved === "light") {
-      document.documentElement.setAttribute("data-theme", saved);
-      els.themeToggle.textContent = saved === "dark" ? "밝게" : "어둡게";
-      els.themeToggle.setAttribute("aria-pressed", saved === "dark" ? "true" : "false");
-    }
   }
 
   function init() {
-    initTheme();
     bindEvents();
     render({ fitMap: false });
     initKakaoMap();

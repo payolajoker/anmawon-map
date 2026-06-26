@@ -18,39 +18,9 @@
   font-family: Pretendard, "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
 }
 
-:root[data-theme="dark"] {
-  color-scheme: dark;
-  --bg: #101512;
-  --surface: #17201a;
-  --surface-muted: #1e2a22;
-  --surface-strong: #e8f2ea;
-  --text: #ecf4ee;
-  --muted: #b3c2b7;
-  --line: #2d3d32;
-  --accent: #75c994;
-  --accent-strong: #9ee0b3;
-  --accent-soft: #213a2a;
-  --danger: #ef9188;
-  --shadow: 0 24px 70px rgba(0, 0, 0, 0.3);
-}
 
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    color-scheme: dark;
-    --bg: #101512;
-    --surface: #17201a;
-    --surface-muted: #1e2a22;
-    --surface-strong: #e8f2ea;
-    --text: #ecf4ee;
-    --muted: #b3c2b7;
-    --line: #2d3d32;
-    --accent: #75c994;
-    --accent-strong: #9ee0b3;
-    --accent-soft: #213a2a;
-    --danger: #ef9188;
-    --shadow: 0 24px 70px rgba(0, 0, 0, 0.3);
-  }
-}
+
+
 
 * { box-sizing: border-box; }
 
@@ -132,7 +102,6 @@ h1 {
   align-items: center;
 }
 
-.theme-toggle,
 .source-link,
 .text-button,
 .action-button,
@@ -149,14 +118,12 @@ h1 {
   transition: transform 0.16s ease, border-color 0.16s ease, background 0.16s ease;
 }
 
-.theme-toggle:hover,
 .source-link:hover,
 .text-button:hover,
 .action-button:hover,
 .map-link:hover,
 .source-detail:hover { border-color: var(--accent); }
 
-.theme-toggle:active,
 .source-link:active,
 .text-button:active,
 .action-button:active,
@@ -438,7 +405,6 @@ mark { border-radius: 4px; background: color-mix(in srgb, var(--accent) 20%, tra
   .primary-actions,
   .secondary-actions,
   .map-toolbar-actions { width: 100%; }
-  .theme-toggle,
   .source-link,
   .action-button,
   .map-link,
