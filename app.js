@@ -516,7 +516,7 @@
   function render(options = {}) {
     const { fitMap = false, panToSelected = false, useUserLocation = true } = options;
     const filtered = getFilteredShops();
-    const displayed = useUserLocation ? getDisplayShops(filtered) : filtered;
+    const displayed = useUserLocation ? getDisplayShops(filtered) : thinOverlappingShops(filtered);
     if (fitMap && useUserLocation && mapState.userLocation && displayed.length && !panToSelected) {
       selectNearestShop(displayed);
     }
