@@ -80,6 +80,10 @@
     return present(value) ? String(value).trim() : emptyText;
   }
 
+  function displayHours(shop) {
+    return safeText(shop.hoursNormalized?.display || shop.hours);
+  }
+
   function escapeHtml(value) {
     return String(value || "")
       .replaceAll("&", "&amp;")
@@ -189,6 +193,7 @@
       shop.address,
       shop.price,
       shop.hours,
+      shop.hoursNormalized?.display,
       shop.reservation,
       shop.parking,
       shop.intro,
@@ -255,7 +260,12 @@
     els.detailAddress.textContent = safeText(shop.address);
     els.detailPhone.textContent = safeText(shop.phone);
     els.detailPrice.textContent = safeText(shop.price);
-    els.detailHours.textContent = safeText(shop.hours);
+    els.detailHours.textContent = displayHours(shop);
+    if (present(shop.hoursNormalized?.raw) && shop.hoursNormalized.raw !== shop.hoursNormalized?.display) {
+      els.detailHours.title = `원문: ${shop.hoursNormalized.raw}`;
+    } else {
+      els.detailHours.removeAttribute("title");
+    }
     els.detailReservation.textContent = safeText(shop.reservation);
     els.detailParking.textContent = safeText(shop.parking);
     els.detailCoords.textContent = `${shop.lat}, ${shop.lng}`;
